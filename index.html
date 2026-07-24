@@ -1,23 +1,32 @@
+HTML
 <!DOCTYPE html>
 <html>
   <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebAR Image Tracking (Fit Texture Mode)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>WebAR Image Tracking</title>
     
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     
     <style>
-      body { 
+      html, body { 
         margin: 0; 
+        padding: 0;
+        width: 100%;
+        height: 100%;
         overflow: hidden; 
+      }
+      .a-canvas {
+        width: 100% !important;
+        height: 100% !important;
       }
     </style>
   </head>
   <body>
 
+    <!-- ปรับแต่ง filterMinCF และ filterBeta ช่วยให้สแกนได้ไวขึ้นแม้มุมเอียง/แนวนอน -->
     <a-scene 
-      mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiLoading: yes; uiScanning: yes; uiError: yes;" 
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiLoading: yes; uiScanning: yes; uiError: yes; filterMinCF: 0.0001; filterBeta: 0.001;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
@@ -40,32 +49,40 @@
       const video = document.querySelector('#ar-video');
       const arVideoElement = document.querySelector('a-video');
 
-      // ตรวจวัดขนาดจากไฟล์รูปภาพจริงในโฟลเดอร์โดยตรงเพื่อความแม่นยำ
       const img = new Image();
-      
-      // ⚠️ อย่าลืมเปลี่ยนชื่อตรงนี้ให้ตรงกับชื่อและนามสกุลไฟล์รูปภาพจริงในโฟลเดอร์ของคุณนะครับ
-      img.src = './photo.jpg'; 
+      img.src = "./photo.jpg"; 
 
       let aspectRatio = 1;
 
       img.onload = function() {
-        // คำนวณหาอัตราส่วนสี่เหลี่ยมของรูปภาพต้นฉบับ
         aspectRatio = this.naturalHeight / this.naturalWidth;
       };
 
-      // ทำงานเมื่อกล้องส่องเจอรูปภาพ
-      targetEntity.addEventListener("targetFound", event => {
-        console.log("พบรูปภาพ -> เล่นวิดีโอ");
-        video.play(); 
+      function updateLayout() {
+        if (img.complete && img.naturalWidth !== 0) {
+          aspectRatio = img.naturalHeight / img.naturalWidth;
+          arVideoElement.setAttribute('width', '1');
+          arVideoElement.setAttribute('height', aspectRatio.toString());
+        }
+        
+        // บังคับรีเฟรชขนาดกล้อง AR เมื่อมีการหมุนจอ
+        const sceneEl = document.querySelector('a-scene');
+        if (sceneEl && sceneEl.systems && sceneEl.systems['mindar-image-system']) {
+          sceneEl.resize();
+        }
+      }
 
-        // สั่งให้กล่องวิดีโอกางความกว้างและความสูงเท่ากับสัดส่วนของรูปภาพจริง
-        arVideoElement.setAttribute('width', '1');
-        arVideoElement.setAttribute('height', aspectRatio.toString());
+      window.addEventListener('resize', updateLayout);
+      window.addEventListener('orientationchange', () => {
+        setTimeout(updateLayout, 200);
       });
 
-      // ทำงานเมื่อรูปภาพหลุดออกไปจากหน้าจอ
+      targetEntity.addEventListener("targetFound", event => {
+        video.play(); 
+        updateLayout();
+      });
+
       targetEntity.addEventListener("targetLost", event => {
-        console.log("รูปภาพหายไป -> หยุดวิดีโอ");
         video.pause(); 
       });
     </script>
