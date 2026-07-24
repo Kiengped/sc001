@@ -1,21 +1,32 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebAR Image Tracking (Fit Texture Mode)</title>
+    <!-- เพิ่ม viewport-fit=cover เพื่อให้กล้องขยายเต็มจอทั้งแนวตั้งและแนวนอน -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>WebAR Image Tracking (Multi-Orientation)</title>
     
+    <!-- ดึงไลบรารีสมองกล AR มาใช้งาน -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     
     <style>
-      body { 
+      html, body { 
         margin: 0; 
+        padding: 0;
+        width: 100%;
+        height: 100%;
         overflow: hidden; 
+      }
+      /* ปรับแต่งให้ตัววิดีโอกล้องปรับขนาดตามหน้าจอเมื่อหมุนโทรศัพท์ */
+      .a-canvas {
+        width: 100% !important;
+        height: 100% !important;
       }
     </style>
   </head>
   <body>
 
+    <!-- 1. เรียกใช้ไฟล์แผนที่จุดสแกน (targets.mind) -->
     <a-scene 
       mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiLoading: yes; uiScanning: yes; uiError: yes;" 
       color-space="sRGB" 
@@ -23,44 +34,63 @@
       vr-mode-ui="enabled: false" 
       device-orientation-permission-ui="enabled: false">
       
+      <!-- 2. เตรียมไฟล์วิดีโอ -->
       <a-assets>
-        <video id="ar-video" src="./video.mp4" response-type="arraybuffer" loop crossorigin="anonymous" playsinline webkit-playsinline></video>
+        <video id="ar-video" src="./my-video.mp4" response-type="arraybuffer" loop crossorigin="anonymous" playsinline webkit-playsinline></video>
       </a-assets>
 
+      <!-- 3. ตั้งค่ามุมกล้อง -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
+      <!-- 4. ตัวควบคุมการแสดงผลเมื่อสแกนพบรูปภาพ -->
       <a-entity mindar-image-target="targetIndex: 0" id="target-entity">
         <a-video src="#ar-video" width="1" height="1" position="0 0 0" rotation="0 0 0" material="fitTexture: true"></a-video>
       </a-entity>
 
     </a-scene>
 
+    <!-- 5. ระบบตรวจจับการหมุนหน้าจอและคำนวณสัดส่วนอัตโนมัติ -->
     <script>
       const targetEntity = document.querySelector('#target-entity');
       const video = document.querySelector('#ar-video');
       const arVideoElement = document.querySelector('a-video');
 
-      // ตรวจวัดขนาดจากไฟล์รูปภาพจริงในโฟลเดอร์โดยตรงเพื่อความแม่นยำ
+      // ตรวจวัดขนาดจากไฟล์รูปภาพจริง
       const img = new Image();
-      
-      // ⚠️ อย่าลืมเปลี่ยนชื่อตรงนี้ให้ตรงกับชื่อและนามสกุลไฟล์รูปภาพจริงในโฟลเดอร์ของคุณนะครับ
-      img.src = './photo.jpg'; 
+      img.src = "./my-photo.jpg"; // ⚠️ อย่าลืมเปลี่ยนชื่อให้ตรงกับไฟล์รูปจริงของคุณนะครับ
 
       let aspectRatio = 1;
 
       img.onload = function() {
-        // คำนวณหาอัตราส่วนสี่เหลี่ยมของรูปภาพต้นฉบับ
         aspectRatio = this.naturalHeight / this.naturalWidth;
       };
+
+      // ฟังก์ชันปรับขนาดกล้องใหม่เมื่อหมุนหน้าจอ (แนวตั้ง <-> แนวนอน)
+      function updateLayout() {
+        if (img.complete && img.naturalWidth !== 0) {
+          aspectRatio = img.naturalHeight / img.naturalWidth;
+          arVideoElement.setAttribute('width', '1');
+          arVideoElement.setAttribute('height', aspectRatio.toString());
+        }
+        
+        // สั่งอัปเดตมุมมองกล้อง A-Frame
+        const sceneEl = document.querySelector('a-scene');
+        if (sceneEl && sceneEl.resize) {
+          sceneEl.resize();
+        }
+      }
+
+      // ดักจับเหตุการณ์เมื่อผู้ใช้หมุนโทรศัพท์ หรือเปลี่ยนขนาดหน้าจอ
+      window.addEventListener('resize', updateLayout);
+      window.addEventListener('orientationchange', () => {
+        setTimeout(updateLayout, 300); // หน่วงเวลาเล็กน้อยเพื่อให้หน้าจอปรับพิกเซลเสร็จก่อน
+      });
 
       // ทำงานเมื่อกล้องส่องเจอรูปภาพ
       targetEntity.addEventListener("targetFound", event => {
         console.log("พบรูปภาพ -> เล่นวิดีโอ");
         video.play(); 
-
-        // สั่งให้กล่องวิดีโอกางความกว้างและความสูงเท่ากับสัดส่วนของรูปภาพจริง
-        arVideoElement.setAttribute('width', '1');
-        arVideoElement.setAttribute('height', aspectRatio.toString());
+        updateLayout(); // คำนวณขนาดและทิศทางอีกครั้งเพื่อความแม่นยำ
       });
 
       // ทำงานเมื่อรูปภาพหลุดออกไปจากหน้าจอ
@@ -69,6 +99,9 @@
         video.pause(); 
       });
     </script>
+
+  </body>
+</html>
 
   </body>
 </html>
